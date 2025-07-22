@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -101,6 +102,7 @@ type App struct {
 	statusBar   *StatusBar
 	focusedPane PaneType
 	running     bool
+	autocd      bool
 	width       int
 	height      int
 }
@@ -387,8 +389,13 @@ func (p *Previewer) scroll(delta int) {
 	}
 }
 
-func NewStatusBar() *StatusBar {
-	defaultMsg := "[Ready] • q:quit /:search Ctrl+n:new file Ctrl+o:open"
+func NewStatusBar(autocd bool) *StatusBar {
+	var defaultMsg string
+	if autocd {
+		defaultMsg = "[Ready - AutoCD] • q:inherit directory /:search Ctrl+n:new file Ctrl+o:open"
+	} else {
+		defaultMsg = "[Ready] • q:quit /:search Ctrl+n:new file Ctrl+o:open"
+	}
 	return &StatusBar{
 		message:     defaultMsg,
 		isPrompt:    false,
@@ -455,7 +462,7 @@ func (s *StatusBar) updateMessage() {
 	}
 }
 
-func NewApp() (*App, error) {
+func NewApp(autocd bool) (*App, error) {
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		return nil, err
@@ -480,9 +487,10 @@ func NewApp() (*App, error) {
 		screen:      screen,
 		navigator:   NewNavigator(wd),
 		previewer:   NewPreviewer(),
-		statusBar:   NewStatusBar(),
+		statusBar:   NewStatusBar(autocd),
 		focusedPane: FileList,
 		running:     true,
+		autocd:      autocd,
 		width:       width,
 		height:      height,
 	}
@@ -721,7 +729,11 @@ func (app *App) handleKey(ev *tcell.EventKey) {
 	case tcell.KeyRune:
 		switch ev.Rune() {
 		case 'q':
-			app.running = false
+			if app.autocd {
+				app.exitWithDirectoryInheritance(app.navigator.currentPath)
+			} else {
+				app.running = false
+			}
 		case '/':
 			app.navigator.searchMode = true
 			app.navigator.searchQuery = ""
@@ -873,7 +885,11 @@ func (app *App) handleKey(ev *tcell.EventKey) {
 		}
 
 	case tcell.KeyCtrlC:
-		app.running = false
+		if app.autocd {
+			app.exitWithDirectoryInheritance(app.navigator.currentPath)
+		} else {
+			app.running = false
+		}
 	}
 }
 
@@ -1080,8 +1096,88 @@ func (app *App) openFileWithEditor(filePath string) {
 		os.Exit(1)
 	}
 	
-	// Clean exit after editor closes
-	os.Exit(0)
+	// If autocd is enabled, use directory inheritance; otherwise clean exit
+	if app.autocd {
+		app.exitWithDirectoryInheritance(app.navigator.currentPath)
+	} else {
+		os.Exit(0)
+	}
+}
+
+// exitWithDirectoryInheritance implements the autocd pattern from the autocd documentation.
+// It creates a self-cleaning transition script that changes to the target directory
+// and spawns a new shell, then replaces the current process with that script.
+func (app *App) exitWithDirectoryInheritance(targetDir string) {
+	// Validate target directory
+	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+		app.statusBar.showError("Target directory does not exist: " + targetDir)
+		app.running = false // fallback to normal exit
+		return
+	}
+	
+	// Get user's shell, fallback to bash
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+	
+	// Create transition script with self-cleanup
+	scriptContent := fmt.Sprintf(`#!/bin/bash
+# Auto-generated transition script for PowPow directory inheritance
+# This script will self-destruct after execution
+
+# Set up self-cleanup trap
+trap 'rm -f "$0" 2>/dev/null || true' EXIT INT TERM
+
+# Change to target directory with error handling  
+if cd "%s" 2>/dev/null; then
+    echo "PowPow: Inheriting directory: %s"
+else
+    echo "PowPow: Warning - Could not change to %s, staying in current directory" >&2
+fi
+
+# Replace this script process with user's shell
+exec "%s"
+`, targetDir, targetDir, targetDir, shell)
+
+	// Create temporary script file
+	tmpFile, err := os.CreateTemp("", "powpow-autocd-*.sh")
+	if err != nil {
+		app.statusBar.showError("Failed to create transition script: " + err.Error())
+		app.running = false // fallback to normal exit
+		return
+	}
+	scriptPath := tmpFile.Name()
+	
+	// Write script content
+	if _, err := tmpFile.WriteString(scriptContent); err != nil {
+		tmpFile.Close()
+		os.Remove(scriptPath)
+		app.statusBar.showError("Failed to write transition script: " + err.Error())
+		app.running = false // fallback to normal exit
+		return
+	}
+	tmpFile.Close()
+	
+	// Make script executable
+	if err := os.Chmod(scriptPath, 0755); err != nil {
+		os.Remove(scriptPath)
+		app.statusBar.showError("Failed to make script executable: " + err.Error())
+		app.running = false // fallback to normal exit
+		return
+	}
+	
+	// Clean up tcell before process replacement
+	app.screen.Fini()
+	
+	// Replace current process with the transition script
+	if err := syscall.Exec(scriptPath, []string{scriptPath}, os.Environ()); err != nil {
+		// If exec fails, restore terminal and show error
+		fmt.Fprintf(os.Stderr, "PowPow: Failed to execute transition script: %v\n", err)
+		os.Remove(scriptPath)
+		os.Exit(1)
+	}
+	// This point should never be reached if exec succeeds
 }
 
 func (app *App) renameItem(newName string) {
@@ -1157,6 +1253,17 @@ func (app *App) run() {
 func printHelp() {
 	fmt.Println(`powpow - Terminal File Explorer
 
+USAGE:
+    powpow [OPTIONS]
+
+OPTIONS:
+    -a, --autocd       Enable directory inheritance (stay in final directory after quit)
+    -h, --help         Show this help message
+
+ENVIRONMENT:
+    POWPOW_AUTOCD=1   Enable autocd mode via environment variable
+    EDITOR            Your preferred text editor (nano, vim, code, etc.)
+
 ## ⌨️ Keyboard Controls
 
 ### Navigation
@@ -1231,13 +1338,32 @@ For images, binaries, and other non-text files, powpow displays:
 }
 
 func main() {
-	// Check for help flag
-	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
-		printHelp()
-		return
+	// Parse command-line arguments
+	autocd := false
+	
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		switch arg {
+		case "--help", "-h":
+			printHelp()
+			return
+		case "--autocd", "-a":
+			autocd = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", arg)
+				fmt.Fprintf(os.Stderr, "Use --help for usage information\n")
+				os.Exit(1)
+			}
+		}
+	}
+	
+	// Check environment variable as fallback
+	if !autocd && os.Getenv("POWPOW_AUTOCD") == "1" {
+		autocd = true
 	}
 
-	app, err := NewApp()
+	app, err := NewApp(autocd)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing application: %v\n", err)
 		os.Exit(1)

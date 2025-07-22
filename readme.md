@@ -41,6 +41,7 @@ go build -o powpow
 
 ```bash
 powpow                 # Launch in current directory
+powpow -a              # Launch with autocd (inherit final directory on exit)
 ```
 
 Navigate any directory structure with instant preview of text files, complete file information for binaries, and full file management capabilities.
