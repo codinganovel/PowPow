@@ -35,10 +35,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
+	"github.com/codinganovel/autocd-go"
 	"github.com/gdamore/tcell/v2"
 	"github.com/sahilm/fuzzy"
 )
@@ -1104,80 +1104,16 @@ func (app *App) openFileWithEditor(filePath string) {
 	}
 }
 
-// exitWithDirectoryInheritance implements the autocd pattern from the autocd documentation.
-// It creates a self-cleaning transition script that changes to the target directory
-// and spawns a new shell, then replaces the current process with that script.
+// exitWithDirectoryInheritance uses the autocd-go library for directory inheritance.
 func (app *App) exitWithDirectoryInheritance(targetDir string) {
-	// Validate target directory
-	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-		app.statusBar.showError("Target directory does not exist: " + targetDir)
-		app.running = false // fallback to normal exit
-		return
-	}
-	
-	// Get user's shell, fallback to bash
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash"
-	}
-	
-	// Create transition script with self-cleanup
-	scriptContent := fmt.Sprintf(`#!/bin/bash
-# Auto-generated transition script for PowPow directory inheritance
-# This script will self-destruct after execution
-
-# Set up self-cleanup trap
-trap 'rm -f "$0" 2>/dev/null || true' EXIT INT TERM
-
-# Change to target directory with error handling  
-if cd "%s" 2>/dev/null; then
-    echo "PowPow: Inheriting directory: %s"
-else
-    echo "PowPow: Warning - Could not change to %s, staying in current directory" >&2
-fi
-
-# Replace this script process with user's shell
-exec "%s"
-`, targetDir, targetDir, targetDir, shell)
-
-	// Create temporary script file
-	tmpFile, err := os.CreateTemp("", "powpow-autocd-*.sh")
-	if err != nil {
-		app.statusBar.showError("Failed to create transition script: " + err.Error())
-		app.running = false // fallback to normal exit
-		return
-	}
-	scriptPath := tmpFile.Name()
-	
-	// Write script content
-	if _, err := tmpFile.WriteString(scriptContent); err != nil {
-		tmpFile.Close()
-		os.Remove(scriptPath)
-		app.statusBar.showError("Failed to write transition script: " + err.Error())
-		app.running = false // fallback to normal exit
-		return
-	}
-	tmpFile.Close()
-	
-	// Make script executable
-	if err := os.Chmod(scriptPath, 0755); err != nil {
-		os.Remove(scriptPath)
-		app.statusBar.showError("Failed to make script executable: " + err.Error())
-		app.running = false // fallback to normal exit
-		return
-	}
-	
 	// Clean up tcell before process replacement
 	app.screen.Fini()
 	
-	// Replace current process with the transition script
-	if err := syscall.Exec(scriptPath, []string{scriptPath}, os.Environ()); err != nil {
-		// If exec fails, restore terminal and show error
-		fmt.Fprintf(os.Stderr, "PowPow: Failed to execute transition script: %v\n", err)
-		os.Remove(scriptPath)
-		os.Exit(1)
-	}
-	// This point should never be reached if exec succeeds
+	// Use autocd-go library with fallback handling
+	autocd.ExitWithDirectoryOrFallback(targetDir, func() {
+		fmt.Printf("PowPow: AutoCD failed, but final directory was: %s\n", targetDir)
+		os.Exit(0)
+	})
 }
 
 func (app *App) renameItem(newName string) {
