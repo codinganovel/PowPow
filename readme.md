@@ -1,22 +1,21 @@
 # powpow
 
-**powpow** is a lightning-fast TUI file manager with split-pane preview for navigating, viewing, and managing files in your terminal. See file contents instantly, perform file operations seamlessly, and launch text files directly in your configured editor.
+**powpow** is a minimal, lightning-fast TUI file manager designed for distraction-free navigation and file management in your terminal. Built with a focus on simplicity and speed - no clutter, just pure file management efficiency.
 
-> Point, preview, POW POW! File management at the speed of thought.
+> Point, navigate, POW POW! Minimal file management at the speed of thought.
 
 ---
 
 ## ✨ Features
 
-- **Split-pane interface** with file list (40%) and preview pane (60%)
-- **Instant text file preview** with syntax highlighting-ready display
+- **Minimal single-pane interface** using full terminal width for file navigation
+- **Built-in help system** - Press F1 to see all keyboard shortcuts
 - **Advanced fuzzy search** with real-time filtering and typo tolerance
-- **Complete file operations** - create, rename, delete files and folders
-- **Smart file detection** for all file types with detailed info display
+- **Complete file operations** - create, rename, delete files and folders with clean popup dialogs
+- **Smart file detection** with text file recognition
 - **Seamless editor integration** - opens text files in your `$EDITOR` and exits cleanly
 - **Vim-style navigation** (hjkl) plus arrow key support
-- **Focus switching** between file list and preview pane
-- **Tree-style directory display** with clean visual hierarchy
+- **Clean, distraction-free design** focused on productivity
 - **Cross-platform** Go implementation with tcell - works everywhere
 
 ---
@@ -25,12 +24,12 @@
 
 ### Using Go
 ```bash
-go install github.com/yourusername/powpow@latest
+go install github.com/codinganovel/powpow@latest
 ```
 
 ### Manual Build
 ```bash
-git clone https://github.com/yourusername/powpow
+git clone https://github.com/codinganovel/powpow
 cd powpow
 go build -o powpow
 ```
@@ -44,22 +43,23 @@ powpow                 # Launch in current directory
 powpow -a              # Launch with autocd (inherit final directory on exit)
 ```
 
-Navigate any directory structure with instant preview of text files, complete file information for binaries, and full file management capabilities.
+Navigate any directory structure with minimal, distraction-free interface and complete file management capabilities. Press F1 for keyboard shortcuts.
 
 ---
 
 ## ⌨️ Keyboard Controls
 
+> **Press F1 in the app for a complete help screen with all shortcuts!**
+
 ### Navigation
-| Key         | Action                              |
-|-------------|-------------------------------------|
-| `↑ ↓` `j k` | Navigate file list                  |
-| `← →` `h l` | Go up directory / Enter directory   |
-| `Enter`     | Enter directory or focus preview    |
-| `Tab`       | Switch focus (file list ↔ preview) |
-| `Backspace` | Go to parent directory              |
-| `Home/End`  | Jump to first/last item             |
-| `PgUp/PgDn` | Jump by page                        |
+| Key         | Action                        |
+|-------------|-------------------------------|
+| `↑ ↓` `j k` | Navigate file list            |
+| `← →` `h l` | Go up / Enter directory       |
+| `Enter`     | Enter directory               |
+| `Backspace` | Go to parent directory        |
+| `Home/End`  | Jump to first/last item       |
+| `PgUp/PgDn` | Jump by page                  |
 
 ### File Operations
 | Key      | Action                    |
@@ -70,40 +70,32 @@ Navigate any directory structure with instant preview of text files, complete fi
 | `Ctrl+R` | Rename file/folder        |
 | `Ctrl+D` | Delete file/folder        |
 
-### Search & Navigation
+### Search & Help
 | Key         | Action                          |
 |-------------|--------------------------------|
 | `/`         | Start fuzzy search             |
-| `ESC`       | Exit search/return to file list|
+| `F1`        | Show help screen               |
+| `ESC`       | Exit search/help mode          |
 | `q`         | Quit application               |
 | `Ctrl+C`    | Force quit                     |
-
-### Preview Pane (when focused)
-| Key      | Action                    |
-|----------|---------------------------|
-| `↑ ↓`    | Scroll preview content    |
-| `PgUp/Dn`| Scroll by page            |
-| `Home/End`| Jump to start/end        |
-| `ESC`    | Return focus to file list |
 
 ### Search Mode
 | Key         | Action                          |
 |-------------|--------------------------------|
 | `Type`      | Filter files with fuzzy matching |
 | `↑ ↓`       | Navigate filtered results       |
-| `Enter`     | Select file                     |
+| `Enter`     | Select file/directory          |
 | `ESC`       | Exit search mode               |
 | `Backspace` | Delete search characters       |
 
 ---
 
-## 🔍 Preview Features
+## 📁 File Management Features
 
-### Text File Preview
-- **Instant content display** for supported text files
-- **10MB size limit** with truncation warnings for performance
-- **Encoding detection** with fallback for binary files
-- **Scrollable content** with independent pane navigation
+### Smart Text File Detection
+- **Automatic recognition** of text files by extension and content analysis
+- **Supported formats**: code files, configs, docs, scripts, and many more
+- **Safe opening** - only text files can be opened in your editor
 
 ### Supported Text Extensions
 - **Code**: `.py`, `.js`, `.ts`, `.rs`, `.go`, `.c`, `.cpp`, `.java`, `.php`, `.rb`
@@ -113,12 +105,11 @@ Navigate any directory structure with instant preview of text files, complete fi
 - **Scripts**: `.sh`, `.pl`
 - **And many more...**
 
-### Non-Text File Info
-For images, binaries, and other non-text files, powpow displays:
-- File size (human-readable)
-- Last modified date
-- File permissions
-- File type indication
+### File Operations
+- **Smart filename sanitization** - spaces become hyphens, invalid chars removed
+- **Conflict resolution** - automatic renaming (file-1.txt, file-2.txt, etc.)
+- **Safe operations** - clean popup dialogs for destructive actions
+- **Clear feedback** - status messages for all operations
 
 ---
 
@@ -135,11 +126,15 @@ export EDITOR=code     # or VS Code
 
 If `$EDITOR` is not set, powpow will show you how to configure it.
 
-### Smart File Operations
-- **Auto-sanitization** of filenames (spaces → hyphens, invalid chars removed)
-- **Conflict resolution** with automatic renaming (file-1.txt, file-2.txt, etc.)
-- **Safe deletion** with confirmation prompts
-- **Error handling** with clear status messages
+### AutoCD Mode
+Enable directory inheritance to stay in the directory when you exit:
+
+```bash
+powpow -a                    # Command line flag
+export POWPOW_AUTOCD=1       # Environment variable
+```
+
+With AutoCD enabled, your shell will change to whatever directory you were browsing when you quit powpow.
 
 ---
 
@@ -156,9 +151,10 @@ All dependencies are automatically managed by Go modules.
 
 ## 🚀 Performance
 
-- **Memory efficient** - Large files are handled gracefully
-- **Fast directory scanning** with lazy loading
-- **Responsive UI** - Smooth scrolling and instant search
+- **Minimal design** - No visual bloat, maximum efficiency
+- **Fast directory scanning** with optimized file operations
+- **Responsive UI** - Instant search and smooth navigation
+- **Low resource usage** - Designed for speed and simplicity
 - **Cross-platform** - Works on Linux, macOS, Windows
 
 ---
